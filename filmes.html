@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Organizador de Filmes</title>
+<style>
+:root{
+  --bg:#f7f7f7; --card-bg:#fff; --text:#111;
+  --input-bg:#fff; --input-border:#ccc;
+  --btn-bg:#0b69ff; --btn-text:#fff;
+  --x-adjust:0px;
+}
+body.dark{
+  --bg:#121212; --card-bg:#1e1e1e; --text:#eee;
+  --input-bg:#2a2a2a; --input-border:#444;
+  --btn-bg:#2563eb; --btn-text:#fff;
+}
+body{font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);margin:0;min-height:100vh;}
+.container{max-width:900px;margin:auto;padding:24px;}
+h1{text-align:center;margin-bottom:16px;}
+.movie{background:var(--card-bg);padding:16px;border-radius:8px;margin-bottom:12px;}
+.movie input{border-radius:6px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text);margin-bottom:6px;padding:8px 12px;box-sizing:border-box;width:100%;height:40px;font-size:14px;}
+.input-wrapper{position:relative;margin-bottom:6px;}
+.input-wrapper input{padding-right:48px;}
+.clear-btn{
+  --size:28px;
+  position:absolute; right:8px; top:50%;
+  transform: translateY(calc(-50% + var(--x-adjust)));
+  width:var(--size); height:var(--size);
+  display:flex; align-items:center; justify-content:center;
+  background:transparent; border:0; cursor:pointer; padding:0; color:#888;
+}
+.clear-btn svg{width:16px;height:16px;display:block;}
+button.app-btn{padding:10px 14px;border-radius:8px;border:0;background:var(--btn-bg);color:var(--btn-text);font-weight:bold;cursor:pointer;margin-top:8px;}
+#darkModeBtn{position:fixed;top:20px;right:20px;border-radius:50%;width:40px;height:40px;font-size:18px;padding:0;display:flex;align-items:center;justify-content:center;}
+.times-container{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+.time-wrapper{position:relative;width:100%;display:flex;align-items:center;gap:8px;}
+.time-wrapper input{padding-right:40px;height:40px;box-sizing:border-box;}
+.add-time-container{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
+.priority-wrapper{display:flex;align-items:center;gap:6px;}
+#result{margin-top:24px;background:var(--card-bg);padding:16px;border-radius:8px;color:var(--text);}
+
+/* ====== Modal ====== */
+#modalOverlay{
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.7); display:none; align-items:center; justify-content:center;
+  z-index:999;
+}
+#modalContent{
+  background:#fff; padding:20px; border-radius:12px; max-width:500px;
+  text-align:center; position:relative;
+}
+#modalContent img{max-width:100%; border-radius:12px;}
+#closeModal{
+  position:absolute; top:10px; right:10px; border:0; background:#f00; color:#fff; font-weight:bold; cursor:pointer; padding:6px 10px; border-radius:6px;
+}
+</style>
+</head>
+<body>
+<button id="darkModeBtn">🌙</button>
+<div class="container">
+<h1>Organizador de Filmes</h1>
+<div id="moviesContainer"></div>
+<button id="addMovieBtn" class="app-btn">Adicionar Filme</button>
+<button id="calculateBtn" class="app-btn">Calcular Melhor Disposição</button>
+<div id="result"></div>
+</div>
+
+<!-- Modal -->
+<div id="modalOverlay">
+  <div id="modalContent">
+    <button id="closeModal">X</button>
+    <img src="https://upload.wikimedia.org/wikipedia/en/b/b4/PrincessTwilightSparkle.png" alt="Carol">
+  </div>
+</div>
+
+<script>
+const container = document.getElementById('moviesContainer');
+const addBtn = document.getElementById('addMovieBtn');
+const calcBtn = document.getElementById('calculateBtn');
+const resultDiv = document.getElementById('result');
+const darkBtn = document.getElementById('darkModeBtn');
+
+// Modal
+const modalOverlay = document.getElementById('modalOverlay');
+const closeModal = document.getElementById('closeModal');
+closeModal.addEventListener('click', ()=>{ modalOverlay.style.display="none"; });
+
+// dark mode
+darkBtn.addEventListener('click', ()=>{
+  document.body.classList.toggle('dark');
+  darkBtn.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
+});
+
+const X_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+<path d="M6 6 L18 18 M6 18 L18 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>`;
+
+function parseTimeToMinutes(str){ const [h,m]=str.split(':').map(Number); return h*60+m; }
+function formatMinutesToTime(mins){ const h=Math.floor(mins/60).toString().padStart(2,'0'); const m=(mins%60).toString().padStart(2,'0'); return `${h}:${m}`; }
+
+let movieCount=0;
+
+function addMovie(){
+  movieCount++;
+  const div=document.createElement('div'); div.className='movie';
+
+  const nameWrapper=document.createElement('div'); nameWrapper.className='input-wrapper';
+  const nameInput=document.createElement('input'); nameInput.type='text'; nameInput.placeholder='Nome do filme'; nameInput.className='name';
+  // 👇 Evento: se digitar "Carol", abre modal
+  nameInput.addEventListener('input', ()=>{
+    if(nameInput.value.trim().toLowerCase() === "carol"){
+      modalOverlay.style.display="flex";
+    }
+  });
+
+  const clearName=document.createElement('button'); clearName.className='clear-btn'; clearName.innerHTML=X_SVG; clearName.addEventListener('click',()=>div.remove());
+  nameWrapper.appendChild(nameInput); nameWrapper.appendChild(clearName);
+
+  const durationWrapper=document.createElement('div'); durationWrapper.className='input-wrapper';
+  const durationInput=document.createElement('input'); durationInput.type='number'; durationInput.placeholder='Duração (min)'; durationInput.className='duration';
+  durationWrapper.appendChild(durationInput);
+
+  const timesContainer=document.createElement('div'); timesContainer.className='times-container';
+
+  const addTimeContainer=document.createElement('div'); addTimeContainer.className='add-time-container';
+  const addTimeBtn=document.createElement('button'); addTimeBtn.className='app-btn'; addTimeBtn.textContent='Adicionar horário';
+  const priorityWrapper=document.createElement('div'); priorityWrapper.className='priority-wrapper';
+  const priorityInput=document.createElement('input'); priorityInput.type='checkbox';
+  const priorityLabel=document.createElement('label'); priorityLabel.textContent='Prioridade';
+  priorityWrapper.appendChild(priorityInput); priorityWrapper.appendChild(priorityLabel);
+  addTimeContainer.appendChild(addTimeBtn); addTimeContainer.appendChild(priorityWrapper);
+
+  function addTimeInput(value=''){
+    const wrapper=document.createElement('div'); wrapper.className='time-wrapper';
+    const input=document.createElement('input'); input.type='time'; input.className='time'; input.value=value; input.step=1800;
+    const clearBtn=document.createElement('button'); clearBtn.className='clear-btn'; clearBtn.innerHTML=X_SVG; clearBtn.addEventListener('click',()=>wrapper.remove());
+    wrapper.appendChild(input); wrapper.appendChild(clearBtn);
+    timesContainer.appendChild(wrapper);
+  }
+
+  addTimeInput();
+  addTimeBtn.addEventListener('click',()=>addTimeInput());
+
+  div.appendChild(nameWrapper); div.appendChild(durationWrapper); div.appendChild(timesContainer); div.appendChild(addTimeContainer);
+  container.appendChild(div);
+}
+
+addMovie(); addMovie();
+addBtn.addEventListener('click', addMovie);
+
+// ======= CÁLCULO DE SESSÕES =======
+calcBtn.addEventListener('click', ()=>{
+  const movies=[]; 
+  const movieDivs=document.querySelectorAll('.movie');
+
+  for(const div of movieDivs){
+    const name=div.querySelector('.name').value.trim();
+    const duration=parseInt(div.querySelector('.duration').value);
+    const timeInputs=div.querySelectorAll('.time'); 
+    const times=[];
+    for(const ti of timeInputs){ if(ti.value) times.push(parseTimeToMinutes(ti.value)); }
+
+    const priorityChecked=div.querySelector('.priority-wrapper input').checked;
+    if(name && duration && times.length>0){
+      movies.push({name,duration,times,priority:priorityChecked});
+    }
+  }
+
+  if(movies.length<2){ resultDiv.innerHTML="Adicione pelo menos 2 filmes válidos."; return; }
+
+  // 1️⃣ Agendar prioritários primeiro
+  const scheduled=[]; 
+  const priorities = movies.filter(m=>m.priority).sort((a,b)=>a.times[0]-b.times[0]);
+  for(const movie of priorities){
+    let placed=false;
+    const timesSorted = movie.times.sort((a,b)=>a-b);
+
+    for(const t of timesSorted){
+      const conflict = scheduled.find(f=> t < f.start + f.duration && t + movie.duration > f.start);
+      if(!conflict){
+        scheduled.push({name:movie.name,start:t,duration:movie.duration,priority:true});
+        placed=true;
+        break;
+      }else if(conflict.priority){
+        resultDiv.innerHTML=`<div style="color:red;">Conflito de prioridade: ${movie.name} e ${conflict.name}. Escolha horários diferentes.</div>`;
+        return;
+      }
+    }
+
+    if(!placed){
+      resultDiv.innerHTML=`<div style="color:red;">Não foi possível agendar o prioritário: ${movie.name}</div>`;
+      return;
+    }
+  }
+
+  // 2️⃣ Depois agendar os não prioritários
+  const normals = movies.filter(m=>!m.priority).sort((a,b)=>a.times[0]-b.times[0]);
+  for(const movie of normals){
+    const timesSorted = movie.times.sort((a,b)=>a-b);
+    for(const t of timesSorted){
+      const conflict = scheduled.find(f=> t < f.start + f.duration && t + movie.duration > f.start);
+      if(!conflict){
+        scheduled.push({name:movie.name,start:t,duration:movie.duration,priority:false});
+        break;
+      }
+    }
+  }
+
+  // Ordena por horário
+  scheduled.sort((a,b)=>a.start-b.start);
+
+  let html="<h3>Melhor disposição de sessões:</h3><ol>";
+  scheduled.forEach(f=>{
+    html+=`<li>${f.name} — ${formatMinutesToTime(f.start)} às ${formatMinutesToTime(f.start+f.duration)}${f.priority?' (Prioridade)':''}</li>`;
+  });
+  html+="</ol>"; 
+  resultDiv.innerHTML=html;
+});
+</script>
+</body>
+</html>
